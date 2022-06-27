@@ -1,0 +1,1 @@
+python main.py --model deeplabv3plus_resnet50 --enable_vis --vis_port 8097 --dataset ade --gpu_id 0 --lr 0.01 --crop_size 512 --crop_val --batch_size 16 --output_stride 8 --total_itrs 40000 --val_interval 400 --val_batch_size 16 --data_root ../mmsegmentation/data/ade/ADEChallengeData2016/

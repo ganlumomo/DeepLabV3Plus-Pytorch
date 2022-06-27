@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 
 from torch.utils import data
-from datasets import VOCSegmentation, Cityscapes
+from datasets import VOCSegmentation, Cityscapes, ADE20KDataset
 from utils import ext_transforms as et
 from metrics import StreamSegMetrics
 
@@ -27,7 +27,7 @@ def get_argparser():
     parser.add_argument("--data_root", type=str, default='./datasets/data',
                         help="path to Dataset")
     parser.add_argument("--dataset", type=str, default='voc',
-                        choices=['voc', 'cityscapes'], help='Name of dataset')
+                        choices=['voc', 'cityscapes', 'ade'], help='Name of dataset')
     parser.add_argument("--num_classes", type=int, default=None,
                         help="num classes (default: None)")
 
@@ -150,6 +150,38 @@ def get_dataset(opts):
                                split='train', transform=train_transform)
         val_dst = Cityscapes(root=opts.data_root,
                              split='val', transform=val_transform)
+
+    if opts.dataset == 'ade':
+        train_transform = et.ExtCompose([
+            # et.ExtResize(size=opts.crop_size),
+            et.ExtRandomScale((0.5, 2.0)),
+            et.ExtRandomCrop(size=(opts.crop_size, opts.crop_size), pad_if_needed=True),
+            et.ExtColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
+            et.ExtRandomHorizontalFlip(),
+            et.ExtToTensor(),
+            et.ExtNormalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225]),
+        ])
+        if opts.crop_val:
+            val_transform = et.ExtCompose([
+                et.ExtResize(opts.crop_size),
+                et.ExtCenterCrop(opts.crop_size),
+                et.ExtToTensor(),
+                et.ExtNormalize(mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]),
+            ])
+        else:
+            val_transform = et.ExtCompose([
+                et.ExtToTensor(),
+                et.ExtNormalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
+            ])
+
+        train_dst = ADE20KDataset(root=opts.data_root,
+                split='training', transform=train_transform)
+        val_dst = ADE20KDataset(root=opts.data_root,
+                split='validation', transform=val_transform)
+
     return train_dst, val_dst
 
 
@@ -214,6 +246,8 @@ def main():
         opts.num_classes = 21
     elif opts.dataset.lower() == 'cityscapes':
         opts.num_classes = 19
+    elif opts.dataset.lower() == 'ade':
+        opts.num_classes = 151
 
     # Setup visualization
     vis = Visualizer(port=opts.vis_port,
@@ -267,9 +301,9 @@ def main():
     # Set up criterion
     # criterion = utils.get_loss(opts.loss_type)
     if opts.loss_type == 'focal_loss':
-        criterion = utils.FocalLoss(ignore_index=255, size_average=True)
+        criterion = utils.FocalLoss(ignore_index=0, size_average=True)
     elif opts.loss_type == 'cross_entropy':
-        criterion = nn.CrossEntropyLoss(ignore_index=255, reduction='mean')
+        criterion = nn.CrossEntropyLoss(ignore_index=0, reduction='mean')
 
     def save_ckpt(path):
         """ save current model
